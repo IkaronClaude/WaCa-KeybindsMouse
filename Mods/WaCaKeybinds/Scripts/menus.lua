@@ -160,10 +160,13 @@ end
 
 -- really on screen: the widget and every panel up to its screen visible (a hidden tab's controls keep IsVisible and
 -- the place they were last drawn - VM 2026-10-28: the creator's first tab answered for the pattern grid)
+local widgetClass
 local function reallyShown(widget)
+    widgetClass = widgetClass or StaticFindObject("/Script/UMG.Widget")
     local w = widget
     for _ = 1, 40 do
-        if not (w and w:IsValid()) then return true end
+        -- (up to the first object that isn't a widget: the top - a tree's outer can be the game instance)
+        if not (w and w:IsValid() and widgetClass and w:IsA(widgetClass)) then return true end
         if not w:IsVisible() then return false end
         if screenClass and w:IsA(screenClass) then return true end
         local p = w:GetParent()
@@ -653,6 +656,147 @@ local function mapUp()
     return nil
 end
 
+-- THE MAP'S ICONS: what one is, shown next to the mouse (the operator, 2026-10-28: no way to get info on an icon - the
+-- game has none to show, not even for its own centre pointer). The name comes from the game: the legend's entry with
+-- the same icon (Main Quest, Clan Outpost, Fresh-kill Pile ...), else the creature kind its icon names (a fox head:
+-- Fox - the game's ESwtQuestCharacterType names), else the legend entry of its kind (the map's checkpoints: Clan
+-- Outposts).
+local mapLabel = { map = nil, names = nil, label = nil, shown = nil }
+local imageClass
+
+-- every texture an icon shows (the player's icon has a direction arrow too)
+local function texturesOf(widget)
+    imageClass = imageClass or StaticFindObject("/Script/UMG.Image")
+    local found = {}
+    local function walk(w, depth)
+        if not (w and w:IsValid()) or depth > 6 then return end
+        if imageClass and w:IsA(imageClass) then
+            pcall(function()
+                local res = w.Brush.ResourceObject
+                if res and res:IsValid() and reallyShown(w) then found[#found + 1] = res:GetFName():ToString() end
+            end)
+        end
+        local ok, n = pcall(function() return w:GetChildrenCount() end)
+        if ok and n then
+            for i = 0, n - 1 do walk(w:GetChildAt(i), depth + 1) end
+        else
+            pcall(function() walk(w.WidgetTree.RootWidget, depth + 1) end)
+        end
+    end
+    walk(widget, 0)
+    return found
+end
+
+-- the legend's names by their icon's texture; the creature kinds
+local function mapNames(m)
+    local id = m:GetFullName()
+    if mapLabel.map == id and mapLabel.names then return mapLabel.names end
+    local names = { byTexture = {}, kinds = {}, outpost = nil }
+    for _, e in ipairs(FindAllOf("GuiIconWithText") or {}) do
+        pcall(function()
+            if e:IsValid() and inside(e, m) and e.Icon and e.Icon:IsValid() then
+                names.byTexture[e.Icon:GetFName():ToString()] = e.Text:ToString()
+            end
+        end)
+    end
+    pcall(function() names.outpost = m.mcGuiMapLegend.mcGuiLegendOutspot.Text:ToString() end)
+    pcall(function()
+        StaticFindObject("/Script/SwtQuest.ESwtQuestCharacterType"):ForEachName(function(n)
+            local kind = (n:ToString():gsub("^.*::", ""):gsub("^Weak", ""))
+            if #kind > 2 then names.kinds[#names.kinds + 1] = kind end
+        end)
+    end)
+    mapLabel.map, mapLabel.names = id, names
+    return names
+end
+
+local checkpointClass
+local function iconName(m, icon)
+    local names = mapNames(m)
+    local texs = {}
+    -- (the shared base circle under herbs and creatures - the legend calls it "Enemy" - names nothing: VM 2026-10-28)
+    for _, t in ipairs(texturesOf(icon)) do
+        if not t:find("_Base", 1, true) then texs[#texs + 1] = t end
+    end
+    for _, t in ipairs(texs) do
+        if names.byTexture[t] then return names.byTexture[t] end
+    end
+    checkpointClass = checkpointClass or StaticFindObject("/Script/Wrc.GuiItemCheckPointMap")
+    if checkpointClass and icon:IsA(checkpointClass) and names.outpost then return names.outpost end
+    for _, t in ipairs(texs) do
+        local lower = t:lower()
+        for _, kind in ipairs(names.kinds) do
+            if lower:find(kind:lower(), 1, true) then return kind end
+        end
+    end
+    -- else the foreground image's own name, readable (T_UI_Icon_Map_Herb_D: Herb)
+    local front = texs[#texs]
+    if front then
+        local readable = front:gsub("^T_UI_", ""):gsub("^Icon_", ""):gsub("^Map_", ""):gsub("_[Dd]$", ""):gsub("_Normal$", "")
+            :gsub("_", " ")
+        if readable ~= "" then return readable end
+    end
+    return nil
+end
+
+local function label(m)
+    if mapLabel.label then
+        local l = StaticFindObject(mapLabel.label)
+        if l and l:IsValid() then return l end
+    end
+    local root = m.WidgetTree.RootWidget
+    local l = StaticConstructObject(StaticFindObject("/Script/UMG.TextBlock"), m.WidgetTree, FName("WaCaMapLabel"))
+    local slot = root:AddChildToCanvas(l)
+    slot:SetAutoSize(true)
+    slot:SetZOrder(100)
+    pcall(function() l:SetFont(m.mcGuiMapLegend.mcGuiTitle.Font) end)
+    pcall(function() l:SetShadowOffset({ X = 2, Y = 2 }) l:SetShadowColorAndOpacity({ R = 0, G = 0, B = 0, A = 0.9 }) end)
+    mapLabel.label = (l:GetFullName():gsub("^%S+ ", ""))
+    return l
+end
+
+local function mapHover(m)
+    if not WaCaNative_CursorPos then return end
+    -- (a map icon is placed by its middle: its widget's box starts where the icon's middle is drawn - VM 2026-10-28,
+    -- the cursor on the player's icon was the box's top left corner. The hit area: a square around that point.)
+    local cx, cy = WaCaNative_CursorPos()
+    local best, bestDist
+    local function consider(w)
+        if not (w and w:IsValid() and reallyShown(w)) then return end
+        local l, t, r, b = WaCa.WidgetRect(w)
+        if not l then return end
+        local half = math.max(12, math.max(r - l, b - t) / 2)
+        local dx, dy = math.abs(cx - l), math.abs(cy - t)
+        if dx <= half and dy <= half and (not bestDist or dx + dy < bestDist) then best, bestDist = w, dx + dy end
+    end
+    local okc, errc = pcall(function()
+        local c = m.CanvasGenericIcons
+        for i = 0, c:GetChildrenCount() - 1 do consider(c:GetChildAt(i)) end
+        consider(m.mcGuiPlayerIcon)
+    end)
+    if not okc then log("map: %s", tostring(errc)) end
+    local text = best and iconName(m, best) or nil
+    local ok, err = pcall(function()
+        local l = label(m)
+        if not text then
+            l:SetVisibility(1)                                  -- (collapsed)
+            mapLabel.shown = nil
+            return
+        end
+        local x, y = WaCaNative_CursorPos()
+        local left, top = WaCa.WidgetRect(m.WidgetTree.RootWidget)
+        local scale = StaticFindObject("/Script/UMG.Default__WidgetLayoutLibrary"):GetViewportScale(controller())
+        l.Slot:SetPosition({ X = (x - (left or 0)) / scale + 40, Y = (y - (top or 0)) / scale + 10 })
+        if mapLabel.shown ~= text then
+            l:SetText(FText(text))
+            mapLabel.shown = text
+            log("map: %s", text)
+        end
+        l:SetVisibility(4)                                      -- (hit-test invisible)
+    end)
+    if not ok then log("map label: %s", tostring(err)) end
+end
+
 local function holdPan(key, on)
     if (drag.held[key] or false) == on then return end
     drag.held[key] = on or nil
@@ -760,7 +904,13 @@ function Menus.Init(c)
     WaCa.On("ScreenShown", function() targetsStale = true later(true) end)
     WaCa.On("ScreenHidden", function() targetsStale = true later(true) end)
     -- hover: the control under the mouse becomes the selected one (native MouseMove, at most every 40 ms)
-    WaCa.On("MouseMove", function() ExecuteInGameThread(function() if drag then dragMoved() else hoverMoved() end end) end)
+    WaCa.On("MouseMove", function()
+        ExecuteInGameThread(function()
+            if drag then return dragMoved() end
+            local m = shown == true and mapUp()
+            if m then mapHover(m) else hoverMoved() end
+        end)
+    end)
     WaCa.On("ScreenFocusIn", function() later(false) end)
     WaCa.On("ScreenFocusOut", function() later(false) end)
     -- after the game has seen the click (Slate's hover state is current then)
