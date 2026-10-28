@@ -1,0 +1,53 @@
+# Builds the mod's zip and publishes a GitHub release when a version tag (v1.2.3) is pushed.
+# Runs on GitHub's Windows runner with the workflow's own token - no personal credentials anywhere.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to build (e.g. 1.0.1) - builds the zip as an artifact, no release"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Version
+        id: v
+        shell: pwsh
+        run: |
+          $v = if ("${{ github.ref_type }}" -eq "tag") { "${{ github.ref_name }}".TrimStart("v") } else { "${{ inputs.version }}" }
+          "version=$v" >> $env:GITHUB_OUTPUT
+          "repo=$(Split-Path $env:GITHUB_WORKSPACE -Leaf)" >> $env:GITHUB_OUTPUT
+
+      - name: Package
+        shell: pwsh
+        run: ./tools/package.ps1 -Version ${{ steps.v.outputs.version }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.v.outputs.repo }}-${{ steps.v.outputs.version }}
+          path: dist/*.zip
+
+      - name: Release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $zip = (Get-ChildItem dist/*.zip | Select-Object -First 1).FullName
+          gh release view "${{ github.ref_name }}" *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload "${{ github.ref_name }}" $zip --clobber
+          } else {
+            gh release create "${{ github.ref_name }}" $zip --title "${{ steps.v.outputs.repo }} ${{ steps.v.outputs.version }}" `
+              --notes "Needs UE4SS for Warrior Cats (Nexus Mods) and WaCa Core. Extract the zip into the game's folder - see README.md."
+          }
