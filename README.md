@@ -6,7 +6,11 @@ The game is built like a console game: the mouse cursor is hidden everywhere, cl
 the camera turns only while you hold a mouse button. This mod makes it play like a PC game.
 
 ## The mouse
-- **A cursor in every menu**, and **clicking works**: menu buttons, the character creator, the map, the pause menu.
+- **A cursor in every menu**, and **clicking works**: menu buttons, the character creator (its grids, the 1 / 2 tabs),
+  "Select Your Cat", the clan choice, the pause menu (and its tabs), the screens' footers ("Back", "Continue" ...).
+- **Hover selects**: the button under the mouse is the selected one - the game's own selection, moved with its own
+  steps, so the highlight, the sound and Enter all follow it.
+- **The map**: drag it with the mouse, zoom with the wheel.
 - **Mouse look** in gameplay: the camera follows the mouse directly - no button to hold, no stick dead zone, curve or
   speed cap (`[Mouse] LookYaw` / `LookPitch`; the game's own invert settings apply).
 - **Left click** interacts (E still works) and **advances dialogue** - a click on an answer choice just picks it.

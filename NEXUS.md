@@ -17,6 +17,8 @@ The game is built like a console game: the mouse cursor is hidden everywhere, cl
 camera only turns while you hold a mouse button. **WaCa Keybinds & Mouse makes it play like a PC game.**
 
 ### 🖱️ The mouse - finally
+- **Hover to select, click to press** - the button under the mouse is the selected one. Drag the map, zoom it with the
+  wheel.
 - **A mouse cursor in every menu** - and **clicking works**: menu buttons, the character creator, the map, the pause
   menu, the splash screen.
 - **Mouse look** - the camera follows your mouse directly, like any PC game: no button to hold, no dead zone, no
