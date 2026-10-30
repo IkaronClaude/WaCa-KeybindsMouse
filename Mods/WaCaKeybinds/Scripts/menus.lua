@@ -150,10 +150,24 @@ local function screenOf(widget)
     return nil
 end
 
+-- the screens in the order they came (ScreenShown); the newest still up is on top - a popup over the pause menu (its
+-- Settings) took the mouse, not the pause menu's tabs under it (VM 2026-10-30: they were hovered through the popup)
+local screenOrder = {}             -- menu screens only (not the HUD or an overlay - WaCa.IsGameplayScreen)
+local function topScreen()
+    for i = #screenOrder, 1, -1 do
+        local s = StaticFindObject(screenOrder[i])
+        local ok, up = pcall(function() return s and s:IsValid() and s:IsInViewport() end)
+        if ok and up then return s end
+    end
+end
+
 local function onScreen(widget)
     local ok, up = pcall(function()
         local screen = screenOf(widget)
-        return screen and screen:IsInViewport()
+        if not (screen and screen:IsInViewport()) then return false end
+        -- (a menu under the top one isn't for the mouse; the HUD and overlays aren't in the order)
+        local top = topScreen()
+        return not top or top:GetAddress() == screen:GetAddress()
     end)
     return ok and up
 end
@@ -456,10 +470,29 @@ local function stepTo(t, nav, clicked)
     local screen = screenOf(t.control) or t.host
     local from, to = navIndex(nav, nav.CurrentControl), navIndex(nav, t.control)
     if not (from and to) then return stepGrid(t, nav, screen, controller()) end
-    local tries = to > from and { BUTTON_DOWN, BUTTON_RIGHT } or { BUTTON_UP, BUTTON_LEFT }
-    -- (a tab bar - the pause menu's - moves with the shoulder buttons, the 1 / 2 keys: on a CLICK only - a tab turns
-    -- the page, and passing over the bar with the mouse shouldn't)
-    if clicked then table.insert(tries, to > from and BUTTON_SHOULDER_R or BUTTON_SHOULDER_L) end
+    -- THE LIST'S LAYOUT picks the steps: a ROW (its controls side by side - a tab bar) moves with Right / Left and the
+    -- shoulder buttons, on a CLICK only - a tab turns the page, and passing over the bar mustn't; a COLUMN with Down /
+    -- Up only. (A Down sent toward a Settings tab went to the page's volume list - Master -> Music - and a Right there
+    -- would have turned a volume up: VM 2026-10-30.)
+    local row = true
+    pcall(function()
+        local list, top0 = nav.ControlsNavigation, nil
+        for i = 1, #list do
+            local _, top = WaCa.WidgetRect(list[i])
+            if top then
+                top0 = top0 or top
+                if math.abs(top - top0) > 12 then row = false end
+            end
+        end
+    end)
+    local tries
+    if row then
+        if not clicked then return false end
+        -- (shoulders only: a Right goes to the page below the bar - a Settings volume)
+        tries = { to > from and BUTTON_SHOULDER_R or BUTTON_SHOULDER_L }
+    else
+        tries = to > from and { BUTTON_DOWN } or { BUTTON_UP }
+    end
     local pcon = controller()
     local count = #nav.ControlsNavigation
     for _, command in ipairs(tries) do
@@ -1134,8 +1167,20 @@ function Menus.Init(c)
             update(nil, f)
         end)
     end
-    WaCa.On("ScreenShown", function() targetsStale = true later(true) end)
-    WaCa.On("ScreenHidden", function() targetsStale = true later(true) end)
+    WaCa.On("ScreenShown", function(screen)
+        pcall(function()
+            if WaCa.IsGameplayScreen and WaCa.IsGameplayScreen(screen) then return end
+            table.insert(screenOrder, (screen:GetFullName():gsub("^%S+ ", "")))
+        end)
+        targetsStale = true later(true)
+    end)
+    WaCa.On("ScreenHidden", function(screen)
+        pcall(function()
+            local path = screen:GetFullName():gsub("^%S+ ", "")
+            for i = #screenOrder, 1, -1 do if screenOrder[i] == path then table.remove(screenOrder, i) end end
+        end)
+        targetsStale = true later(true)
+    end)
     -- hover: the control under the mouse becomes the selected one (native MouseMove, at most every 40 ms)
     WaCa.On("MouseMove", function()
         ExecuteInGameThread(function()
