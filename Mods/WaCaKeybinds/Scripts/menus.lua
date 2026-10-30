@@ -270,7 +270,7 @@ local function listTargets()
         end
         for _, e in ipairs(g) do e.t.cellW, e.t.cellH, e.t.group = dx or dy, dy or dx, g end
     end
-    targetsAt, targetsStale = os.clock(), false
+    targetsAt, targetsStale = WaCa.Now(), false
     local cells = 0
     for _, t in ipairs(targets) do if t.cellW then cells = cells + 1 end end
     local summary = string.format("%d controls on screen, %d of them grid cells", #targets, cells)
@@ -368,7 +368,7 @@ end
 local function hovered()
     if targetsStale then listTargets() end
     local t = findHovered()
-    if not t and os.clock() - targetsAt > 1 then
+    if not t and WaCa.Now() - targetsAt > 1 then
         listTargets()
         t = findHovered()
     end
@@ -949,10 +949,10 @@ local function dragMoved()
     holdPan(mapPan.right, dx < -2)
     holdPan(mapPan.up, dy > 2)
     holdPan(mapPan.down, dy < -2)
-    drag.moved = os.clock()
+    drag.moved = WaCa.Now()
     -- (the mouse held still: the keys go)
     ExecuteInGameThreadWithDelay(150, function()
-        if drag and os.clock() - drag.moved >= 0.14 then
+        if drag and WaCa.Now() - drag.moved >= 0.14 then
             for key in pairs(drag.held) do holdPan(key, false) end
         end
     end)
@@ -1100,7 +1100,7 @@ local function clickHovered()
     if mapUp() then
         if WaCaNative_CursorPos then
             local x, y = WaCaNative_CursorPos()
-            drag = { x = x, y = y, held = {}, moved = os.clock() }
+            drag = { x = x, y = y, held = {}, moved = WaCa.Now() }
         end
         return
     end
