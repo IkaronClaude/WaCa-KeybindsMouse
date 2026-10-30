@@ -400,6 +400,7 @@ end
 
 local BUTTON_UP, BUTTON_DOWN, BUTTON_RIGHT, BUTTON_LEFT = 1, 2, 3, 4      -- ECommands
 local BUTTON_SHOULDER_L, BUTTON_SHOULDER_R = 9, 10
+local BUTTON_TRIGGER_L, BUTTON_TRIGGER_R = 11, 12
 local BACK = { [BUTTON_UP] = BUTTON_DOWN, [BUTTON_DOWN] = BUTTON_UP, [BUTTON_LEFT] = BUTTON_RIGHT, [BUTTON_RIGHT] = BUTTON_LEFT }
 
 local function controller()
@@ -926,8 +927,8 @@ end
 
 -- THE GAME'S SCROLL LISTS (GuiScrollGrid: Bonds, inventory, quests, help ...): their scroll bar is a slider the game sets
 -- from the selection, it moves nothing itself (Pause > Bonds: the bar couldn't be dragged, operator 2026-10-30). So a
--- drag on the bar - and the wheel over the list - steps the selection with the game's own Up / Down until the bar is
--- where the mouse is: the list scrolls the game's way.
+-- drag on the bar selects the row that far down the list - the game's own Up / Down - and the wheel steps it: the list
+-- scrolls the game's way.
 local scrollGridClass
 local sliderDrag                   -- { grid, slider, downRaises } while the left button holds a list's bar
 
@@ -950,24 +951,29 @@ local function scrollGridAt(x, y, onBar)
     return nil
 end
 
-local function sliderValue(slider)
-    local ok, v = pcall(function() return slider:GetNormalizedValue() end)
-    if ok and type(v) == "number" then return v end
-    ok, v = pcall(function()
-        local lo, hi = slider.MinValue, slider.MaxValue
-        return hi > lo and (slider:GetValue() - lo) / (hi - lo) or nil
-    end)
-    return ok and v or nil
+-- one Up / Down on the list's screen
+local function press(grid, command)
+    local screen = screenOf(grid)
+    if screen then screen:OnListenCommand(command, 0, controller()) end
 end
 
--- one Up / Down on the list's screen; true when the bar moved
-local function scrollStep(grid, slider, command)
-    local screen = screenOf(grid)
-    if not screen then return false end
-    local before = sliderValue(slider)
-    screen:OnListenCommand(command, 0, controller())
-    local after = sliderValue(slider)
-    return before ~= nil and after ~= nil and after ~= before, after
+-- the selected row's control (the grid's own navigation - it changes the moment a step is taken; the bar's value
+-- glides there over a few frames, so it can't tell a step from Lua - VM 2026-10-30)
+local function selectedRow(grid)
+    local ok, c = pcall(function() return grid.GridNavigation.CurrentControl end)
+    return ok and c and c:IsValid() and c:GetAddress() or nil
+end
+
+-- steps one way until the selection stops moving (the list's end); how many it took
+local function toEnd(grid, command)
+    local n = 0
+    for _ = 1, 500 do
+        local before = selectedRow(grid)
+        press(grid, command)
+        if selectedRow(grid) == before then break end
+        n = n + 1
+    end
+    return n
 end
 
 local function sliderMoved()
@@ -978,24 +984,17 @@ local function sliderMoved()
     local _, top, _, bottom = WaCa.WidgetRect(d.slider)
     if not top or bottom <= top then return end
     local f = math.max(0, math.min(1, (y - top) / (bottom - top)))
-    -- (which way Down moves the bar: learned from the first step)
-    if d.downRaises == nil then
-        local v0 = sliderValue(d.slider)
-        local moved, v1 = scrollStep(d.grid, d.slider, BUTTON_DOWN)
-        if not moved then moved, v1 = scrollStep(d.grid, d.slider, BUTTON_UP) if moved then d.downRaises = v1 < v0 end
-        else d.downRaises = v1 > v0 end
-        if d.downRaises == nil then return end
-        log("mouse: dragging the %s's scroll bar", d.grid:GetClass():GetFName():ToString())
+    -- (the list's length, once per drag: to its top, then counting the steps to its end)
+    if not d.rows then
+        toEnd(d.grid, BUTTON_UP)
+        d.rows = toEnd(d.grid, BUTTON_DOWN) + 1
+        d.at = d.rows - 1
+        log("mouse: dragging the %s's scroll bar (%d rows)", d.grid:GetClass():GetFName():ToString(), d.rows)
     end
-    local want = d.downRaises and f or 1 - f
-    for _ = 1, 400 do
-        local v = sliderValue(d.slider)
-        if not v or math.abs(v - want) < 0.5 / 100 then break end
-        local raise = want > v
-        local moved, after = scrollStep(d.grid, d.slider, (raise == d.downRaises) and BUTTON_DOWN or BUTTON_UP)
-        -- (stopped, or stepped past the mouse: there)
-        if not moved or (raise and after >= want) or (not raise and after <= want) then break end
-    end
+    local want = math.floor(f * (d.rows - 1) + 0.5)
+    local command = want > d.at and BUTTON_DOWN or BUTTON_UP
+    for _ = 1, math.abs(want - d.at) do press(d.grid, command) end
+    d.at = want
 end
 
 -- a press on a list's bar starts a drag (true: the click is taken)
@@ -1006,6 +1005,57 @@ local function grabSlider()
     if not grid then return false end
     sliderDrag = { grid = grid, slider = slider }
     sliderMoved()
+    return true
+end
+
+-- A TAB INSIDE A PAGE (the pause menu's Quest page: Main / Side quests - keys 3 / 4): its page turns with the trigger
+-- commands (TriggerL / R), not the screen's own tab bar's shoulders - a click on "Side quests" turned the MAIN bar
+-- (operator 2026-10-30). Such a tab: a button state control inside a panel (GuiPanel) below its screen, among sibling
+-- tab buttons; the active one shows its CanvasSelected (the game's own state). The trigger is pressed as many times as
+-- the clicked tab is from the active one, left / right by where they sit. true = handled.
+local buttonStateClass
+local function subTabClick(t)
+    panelClass = panelClass or StaticFindObject("/Script/SwtEngine.GuiPanel")
+    buttonStateClass = buttonStateClass or StaticFindObject("/Script/SwtEngine.GuiButtonState")
+    local c = t.control
+    if not (panelClass and buttonStateClass and c:IsA(buttonStateClass)) then return false end
+    -- (in a panel below the screen? the screen's own tabs aren't)
+    local inPanel = false
+    local o = c:GetOuter()
+    for _ = 1, 24 do
+        if not o or not o:IsValid() or (screenClass and o:IsA(screenClass)) then break end
+        if o:IsA(panelClass) then inPanel = true break end
+        o = o:GetOuter()
+    end
+    if not inPanel then return false end
+    local parent = c:GetParent()
+    if not (parent and parent:IsValid()) then return false end
+    local tabs = {}
+    for i = 0, parent:GetChildrenCount() - 1 do
+        local w = parent:GetChildAt(i)
+        if w and w:IsValid() and w:IsA(buttonStateClass) and reallyShown(w) then
+            local l = WaCa.WidgetRect(w)
+            if l then tabs[#tabs + 1] = { w = w, l = l } end
+        end
+    end
+    if #tabs < 2 then return false end
+    table.sort(tabs, function(a, b) return a.l < b.l end)
+    local function selected(w)
+        local ok, yes = pcall(function() return w.CanvasSelected:IsVisible() end)
+        return ok and yes
+    end
+    local from, to
+    for i, e in ipairs(tabs) do
+        if selected(e.w) then from = i end
+        if e.w:GetAddress() == c:GetAddress() then to = i end
+    end
+    if not (from and to) then return false end
+    if from == to then return true end
+    local screen = screenOf(c) or t.host
+    local command = to > from and BUTTON_TRIGGER_R or BUTTON_TRIGGER_L
+    for _ = 1, math.abs(to - from) do screen:OnListenCommand(command, 0, controller()) end
+    log("mouse click: %s (a tab in its page - %d step(s) %s)%s", c:GetFName():ToString(), math.abs(to - from),
+        to > from and "right" or "left", selected(c) and "" or " - not selected after the steps")
     return true
 end
 
@@ -1031,6 +1081,7 @@ local function clickHovered()
     -- what the keyboard does ("Select Your Cat" ignored a press through the host and the confirm command sent straight to
     -- the screen; Enter worked - VM 2026-10-28); a control outside the navigation (a footer button ...) is pressed through
     -- its host
+    if subTabClick(t) then return end
     local selected, how = selectTarget(t, true)
     if how == "tab" then
         -- (a tab: selecting it turned the page - that was the click)
@@ -1125,7 +1176,7 @@ function Menus.Init(c)
                 if not WaCaNative_CursorPos then return end
                 local grid, slider = scrollGridAt(WaCaNative_CursorPos())
                 if not grid then return end
-                for _ = 1, math.min(10, math.abs(n)) do if not scrollStep(grid, slider, n > 0 and BUTTON_UP or BUTTON_DOWN) then break end end
+                for _ = 1, math.min(10, math.abs(n)) do press(grid, n > 0 and BUTTON_UP or BUTTON_DOWN) end
                 return
             end
             local key = n > 0 and "Up" or "Down"
