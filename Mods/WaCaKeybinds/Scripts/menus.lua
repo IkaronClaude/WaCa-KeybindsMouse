@@ -896,8 +896,94 @@ local function dragMoved()
     end)
 end
 
+-- THE GAME'S SCROLL LISTS (GuiScrollGrid: Bonds, inventory, quests, help ...): their scroll bar is a slider the game sets
+-- from the selection, it moves nothing itself (Pause > Bonds: the bar couldn't be dragged, operator 2026-10-30). So a
+-- drag on the bar - and the wheel over the list - steps the selection with the game's own Up / Down until the bar is
+-- where the mouse is: the list scrolls the game's way.
+local scrollGridClass
+local sliderDrag                   -- { grid, slider, downRaises } while the left button holds a list's bar
+
+local function scrollGridAt(x, y, onBar)
+    scrollGridClass = scrollGridClass or StaticFindObject("/Script/SwtEngine.GuiScrollGrid")
+    if not scrollGridClass then return nil end
+    for _, g in ipairs(FindAllOf("GuiScrollGrid") or {}) do
+        local ok, hit, bar = pcall(function()
+            if not (g:IsValid() and reallyShown(g)) then return nil end
+            local slider = g.mcGuiSliderVertical
+            if not (slider and slider:IsValid() and reallyShown(slider)) then return nil end
+            local l, t, r, b = WaCa.WidgetRect(onBar and slider or g)
+            if not l then return nil end
+            -- (the bar is thin: a few pixels either side count)
+            local pad = onBar and 12 or 0
+            if x >= l - pad and x < r + pad and y >= t and y < b then return g, slider end
+        end)
+        if ok and hit then return hit, bar end
+    end
+    return nil
+end
+
+local function sliderValue(slider)
+    local ok, v = pcall(function() return slider:GetNormalizedValue() end)
+    if ok and type(v) == "number" then return v end
+    ok, v = pcall(function()
+        local lo, hi = slider.MinValue, slider.MaxValue
+        return hi > lo and (slider:GetValue() - lo) / (hi - lo) or nil
+    end)
+    return ok and v or nil
+end
+
+-- one Up / Down on the list's screen; true when the bar moved
+local function scrollStep(grid, slider, command)
+    local screen = screenOf(grid)
+    if not screen then return false end
+    local before = sliderValue(slider)
+    screen:OnListenCommand(command, 0, controller())
+    local after = sliderValue(slider)
+    return before ~= nil and after ~= nil and after ~= before, after
+end
+
+local function sliderMoved()
+    if not (sliderDrag and WaCaNative_CursorPos) then return end
+    local d = sliderDrag
+    if not (d.grid:IsValid() and d.slider:IsValid()) then sliderDrag = nil return end
+    local _, y = WaCaNative_CursorPos()
+    local _, top, _, bottom = WaCa.WidgetRect(d.slider)
+    if not top or bottom <= top then return end
+    local f = math.max(0, math.min(1, (y - top) / (bottom - top)))
+    -- (which way Down moves the bar: learned from the first step)
+    if d.downRaises == nil then
+        local v0 = sliderValue(d.slider)
+        local moved, v1 = scrollStep(d.grid, d.slider, BUTTON_DOWN)
+        if not moved then moved, v1 = scrollStep(d.grid, d.slider, BUTTON_UP) if moved then d.downRaises = v1 < v0 end
+        else d.downRaises = v1 > v0 end
+        if d.downRaises == nil then return end
+        log("mouse: dragging the %s's scroll bar", d.grid:GetClass():GetFName():ToString())
+    end
+    local want = d.downRaises and f or 1 - f
+    for _ = 1, 400 do
+        local v = sliderValue(d.slider)
+        if not v or math.abs(v - want) < 0.5 / 100 then break end
+        local raise = want > v
+        local moved, after = scrollStep(d.grid, d.slider, (raise == d.downRaises) and BUTTON_DOWN or BUTTON_UP)
+        -- (stopped, or stepped past the mouse: there)
+        if not moved or (raise and after >= want) or (not raise and after <= want) then break end
+    end
+end
+
+-- a press on a list's bar starts a drag (true: the click is taken)
+local function grabSlider()
+    if not WaCaNative_CursorPos then return false end
+    local x, y = WaCaNative_CursorPos()
+    local grid, slider = scrollGridAt(x, y, true)
+    if not grid then return false end
+    sliderDrag = { grid = grid, slider = slider }
+    sliderMoved()
+    return true
+end
+
 local function clickHovered()
     if shown ~= true then return end
+    if grabSlider() then return end
     if clickFooter() or clickCategoryTabs() or clickActionIcon() then return end
     -- (on the map a click starts a drag, it presses nothing)
     if mapUp() then
@@ -975,6 +1061,7 @@ function Menus.Init(c)
     WaCa.On("MouseMove", function()
         ExecuteInGameThread(function()
             if drag then return dragMoved() end
+            if sliderDrag then return sliderMoved() end
             local m = shown == true and mapUp()
             if m then mapHover(m) else hoverMoved() end
         end)
@@ -991,7 +1078,7 @@ function Menus.Init(c)
     WaCa.On("ScreenShown", function(s) if isSplash(s) then splash = s:GetFullName() end end)
     WaCa.On("ScreenHidden", function(s) if isSplash(s) then splash = nil end end)
     WaCa.On("KeyUp", function(_, key)
-        if key == "LeftMouseButton" then ExecuteInGameThread(stopDrag) end
+        if key == "LeftMouseButton" then ExecuteInGameThread(function() sliderDrag = nil stopDrag() end) end
     end)
     -- the wheel zooms the map: the game zooms while Up / Down are HELD (a tap did nothing - VM 2026-10-28), so each
     -- notch holds the key a moment longer
@@ -1005,7 +1092,14 @@ function Menus.Init(c)
         local n = tonumber(notches) or 0
         if n == 0 or shown ~= true then return end
         ExecuteInGameThread(function()
-            if not mapUp() then return end
+            if not mapUp() then
+                -- over a scroll list: a notch = a step of its selection (wheel up = up)
+                if not WaCaNative_CursorPos then return end
+                local grid, slider = scrollGridAt(WaCaNative_CursorPos())
+                if not grid then return end
+                for _ = 1, math.min(10, math.abs(n)) do if not scrollStep(grid, slider, n > 0 and BUTTON_UP or BUTTON_DOWN) then break end end
+                return
+            end
             local key = n > 0 and "Up" or "Down"
             if zoom.key and zoom.key ~= key then WaCa.Command("HoldKey|" .. zoom.key .. "|0") zoom.key = nil end
             if not zoom.key then
