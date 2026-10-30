@@ -160,7 +160,21 @@ end
 
 -- really on screen: the widget and every panel up to its screen visible (a hidden tab's controls keep IsVisible and
 -- the place they were last drawn - VM 2026-10-28: the creator's first tab answered for the pattern grid)
-local widgetClass
+-- The pause menu's pages that aren't the current one stay "visible" too (on the Party page the General page's list
+-- played its hover sounds, operator 2026-10-30): a pause page counts only while it is its screen's CurrentPanel, and
+-- a widget faded out (render opacity 0) not at all.
+local widgetClass, pausePanelClass
+local function hiddenPage(w)
+    pausePanelClass = pausePanelClass or StaticFindObject("/Script/SwtEngine.GuiPausePanel")
+    if not (pausePanelClass and w:IsA(pausePanelClass)) then return false end
+    local ok, hidden = pcall(function()
+        local pause = w.ParentPause
+        local cur = pause and pause:IsValid() and pause.CurrentPanel
+        return cur and cur:IsValid() and cur:GetAddress() ~= w:GetAddress()
+    end)
+    return ok and hidden or false
+end
+
 local function reallyShown(widget)
     widgetClass = widgetClass or StaticFindObject("/Script/UMG.Widget")
     local w = widget
@@ -168,6 +182,9 @@ local function reallyShown(widget)
         -- (up to the first object that isn't a widget: the top - a tree's outer can be the game instance)
         if not (w and w:IsValid() and widgetClass and w:IsA(widgetClass)) then return true end
         if not w:IsVisible() then return false end
+        local okO, opacity = pcall(function() return w:GetRenderOpacity() end)
+        if okO and type(opacity) == "number" and opacity < 0.01 then return false end
+        if hiddenPage(w) then return false end
         if screenClass and w:IsA(screenClass) then return true end
         local p = w:GetParent()
         if not (p and p:IsValid()) then
