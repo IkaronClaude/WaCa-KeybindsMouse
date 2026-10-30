@@ -778,6 +778,12 @@ local POI_TITLES = { barter = "STR_TITTLE_BARTER", trainer = "STR_MOVES_TRAINER_
 
 local checkpointClass
 local function iconName(m, icon)
+    -- (another mod's mark - WaCa Clan Life's meeting place ...: its label from the sticky topic "map.marks")
+    local markId = icon:GetFName():ToString():match("^WaCaMapMark_(.+)$")
+    if markId then
+        local labels = WaCa.Latest("map.marks")
+        return type(labels) == "table" and labels[markId] or nil
+    end
     local names = mapNames(m)
     local texs = {}
     -- (the shared base circle under herbs and creatures - the legend calls it "Enemy" - names nothing: VM 2026-10-28)
@@ -834,7 +840,9 @@ local function label(m)
     local slot = root:AddChildToCanvas(l)
     slot:SetAutoSize(true)
     slot:SetZOrder(100)
-    pcall(function() l:SetFont(m.mcGuiMapLegend.mcGuiTitle.Font) end)
+    -- (the font of a legend entry's text: the legend's TITLE font has a heavy outline that drew as a dark copy off to
+    -- the left of a small label - operator 2026-10-30, "drop shadow too far left")
+    pcall(function() l:SetFont(m.mcGuiMapLegend.mcGuiLegendOutspot.mcGuiText.Font) end)
     pcall(function() l:SetShadowOffset({ X = 2, Y = 2 }) l:SetShadowColorAndOpacity({ R = 0, G = 0, B = 0, A = 0.9 }) end)
     mapLabel.label = (l:GetFullName():gsub("^%S+ ", ""))
     return l
@@ -851,7 +859,10 @@ local function mapHover(m)
         local l, t, r, b = WaCa.WidgetRect(w)
         if not l then return end
         local half = math.max(12, math.max(r - l, b - t) / 2)
-        local dx, dy = math.abs(cx - l), math.abs(cy - t)
+        local px, py = l, t
+        -- (another mod's mark is centred on its point, not placed by its corner like the game's)
+        if w:GetFName():ToString():find("^WaCaMapMark_") then px, py = (l + r) / 2, (t + b) / 2 end
+        local dx, dy = math.abs(cx - px), math.abs(cy - py)
         if dx <= half and dy <= half and (not bestDist or dx + dy < bestDist) then best, bestDist = w, dx + dy end
     end
     local okc, errc = pcall(function()
