@@ -723,7 +723,16 @@ local function texturesOf(widget)
     return found
 end
 
--- the legend's names by their icon's texture; the creature kinds
+-- an icon image's core name: the legend shows textures (T_UI_Icon_Map_DenVisit_D, T_UI_Icon_Riverclan), the map's
+-- icons materials made from them (MI_UI_IconDenVisit, MI_UI_Icon_Riverclan) - both "denvisit" / "riverclan" (the map
+-- showed "MI UI IconDenVisit" and nothing for the clan camps, operator 2026-10-30)
+local function coreName(name)
+    local n = name:gsub("^MI_", ""):gsub("^M_", ""):gsub("^T_", ""):gsub("^UI_", ""):gsub("^Icon_?", ""):gsub("^Map_", "")
+        :gsub("_[Dd]$", ""):gsub("_Normal$", "")
+    return (n:gsub("[^%w]", ""):lower())
+end
+
+-- the legend's names by their icon's core name; the creature kinds
 local function mapNames(m)
     local id = m:GetFullName()
     if mapLabel.map == id and mapLabel.names then return mapLabel.names end
@@ -731,7 +740,7 @@ local function mapNames(m)
     for _, e in ipairs(FindAllOf("GuiIconWithText") or {}) do
         pcall(function()
             if e:IsValid() and inside(e, m) and e.Icon and e.Icon:IsValid() then
-                names.byTexture[e.Icon:GetFName():ToString()] = e.Text:ToString()
+                names.byTexture[coreName(e.Icon:GetFName():ToString())] = e.Text:ToString()
             end
         end)
     end
@@ -746,6 +755,10 @@ local function mapNames(m)
     return names
 end
 
+-- (the game's text ids for the map's cat icons - MI_UI_IconBarter ...)
+local POI_TITLES = { barter = "STR_TITTLE_BARTER", trainer = "STR_MOVES_TRAINER_TITLE", movetrainer = "STR_MOVES_TRAINER_TITLE",
+    freshkill = "STR_TITTLE_FRESHKILL" }
+
 local checkpointClass
 local function iconName(m, icon)
     local names = mapNames(m)
@@ -755,7 +768,15 @@ local function iconName(m, icon)
         if not t:find("_Base", 1, true) then texs[#texs + 1] = t end
     end
     for _, t in ipairs(texs) do
-        if names.byTexture[t] then return names.byTexture[t] end
+        local name = names.byTexture[coreName(t)]
+        if name and name ~= "" then return name end
+    end
+    -- (one name inside the other: MI_UI_IconTrainer / T_UI_Icon_Map_MoveTrainer_D)
+    for _, t in ipairs(texs) do
+        local core = coreName(t)
+        for k, name in pairs(names.byTexture) do
+            if #core >= 4 and #k >= 4 and name ~= "" and (k:find(core, 1, true) or core:find(k, 1, true)) then return name end
+        end
     end
     checkpointClass = checkpointClass or StaticFindObject("/Script/Wrc.GuiItemCheckPointMap")
     if checkpointClass and icon:IsA(checkpointClass) and names.outpost then return names.outpost end
@@ -765,12 +786,23 @@ local function iconName(m, icon)
             if lower:find(kind:lower(), 1, true) then return kind end
         end
     end
-    -- else the foreground image's own name, readable (T_UI_Icon_Map_Herb_D: Herb)
+    -- the cats the map marks that the legend leaves out: the game's own title for them
+    for _, t in ipairs(texs) do
+        local id = POI_TITLES[coreName(t)]
+        local text = id and WaCa.GetText(id)
+        if text and text ~= "" and text ~= id then return text end
+    end
+    -- else the foreground image's own name, readable (T_UI_Icon_Map_Herb_D: Herb, MI_UI_IconDenVisit: Den Visit)
     local front = texs[#texs]
     if front then
-        local readable = front:gsub("^T_UI_", ""):gsub("^Icon_", ""):gsub("^Map_", ""):gsub("_[Dd]$", ""):gsub("_Normal$", "")
-            :gsub("_", " ")
+        local readable = front:gsub("^MI_", ""):gsub("^M_", ""):gsub("^T_", ""):gsub("^UI_", ""):gsub("^Icon_?", "")
+            :gsub("^Map_", ""):gsub("_[Dd]$", ""):gsub("_Normal$", ""):gsub("_", " "):gsub("(%l)(%u)", "%1 %2")
         if readable ~= "" then return readable end
+    end
+    if #texs == 0 then
+        local what = icon:GetClass():GetFName():ToString()
+        if what ~= mapLabel.unnamed then log("map: an icon with no image to name it (%s)", what) end
+        mapLabel.unnamed = what
     end
     return nil
 end
