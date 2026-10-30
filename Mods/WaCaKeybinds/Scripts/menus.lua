@@ -317,6 +317,23 @@ local function findHovered()
     return on[1]
 end
 
+local navOf
+
+-- the selected control keeps the mouse while the mouse is still on it: the main menu grows its selected button over
+-- its neighbour, so the mouse on the overlap picked the other one, which grew back over it - Prophecy / Defender Mode
+-- flicked back and forth (operator 2026-10-30)
+local function keepSelected(t)
+    local nav = navOf(t)
+    local cur = nav and nav:IsValid() and nav.CurrentControl
+    if not (cur and cur:IsValid()) or cur:GetAddress() == t.control:GetAddress() then return t end
+    local c = byAddress[cur:GetAddress()]
+    if not c then return t end
+    local on = cur:IsHovered()
+    for _, b in ipairs(c.buttons) do if b:IsValid() and b:IsHovered() then on = true end end
+    if on or mouseIn(c) then return c end
+    return t
+end
+
 local function hovered()
     if targetsStale then listTargets() end
     local t = findHovered()
@@ -324,13 +341,17 @@ local function hovered()
         listTargets()
         t = findHovered()
     end
+    if t then
+        local ok, kept = pcall(keepSelected, t)
+        if ok and kept then t = kept end
+    end
     return t
 end
 
 -- the navigation a control is selected in: a scroll grid's own (the creator's pattern / colour grids keep their
 -- selection there, not in their panel's), else its host's
 local gridClass
-local function navOf(t)
+function navOf(t)
     gridClass = gridClass or StaticFindObject("/Script/SwtEngine.GuiScrollGrid")
     local o = t.control:GetOuter()
     for _ = 1, 24 do
@@ -362,6 +383,7 @@ end
 
 local BUTTON_UP, BUTTON_DOWN, BUTTON_RIGHT, BUTTON_LEFT = 1, 2, 3, 4      -- ECommands
 local BUTTON_SHOULDER_L, BUTTON_SHOULDER_R = 9, 10
+local BACK = { [BUTTON_UP] = BUTTON_DOWN, [BUTTON_DOWN] = BUTTON_UP, [BUTTON_LEFT] = BUTTON_RIGHT, [BUTTON_RIGHT] = BUTTON_LEFT }
 
 local function controller()
     for _, c in ipairs(FindAllOf("SwtPlayerController") or {}) do
@@ -423,6 +445,7 @@ local function stepTo(t, nav, clicked)
     local pcon = controller()
     local count = #nav.ControlsNavigation
     for _, command in ipairs(tries) do
+        local moved = 0
         for _ = 1, count do
             local cur = nav.CurrentControl
             if cur and cur:IsValid() and sameObject(cur, t.control) then
@@ -432,6 +455,16 @@ local function stepTo(t, nav, clicked)
             screen:OnListenCommand(command, 0, pcon)                  -- (IE_Pressed)
             local after = navIndex(nav, nav.CurrentControl)
             if after == before then break end                         -- (this command doesn't move this list)
+            moved = moved + 1
+        end
+        local cur = nav.CurrentControl
+        if cur and cur:IsValid() and sameObject(cur, t.control) then
+            return true, (command == BUTTON_SHOULDER_L or command == BUTTON_SHOULDER_R) and "tab" or nil
+        end
+        -- (these steps didn't get there: step back - a Settings tab isn't in the list, and the steps toward it ran the
+        -- list's selection to the bottom, operator 2026-10-30)
+        if BACK[command] then
+            for _ = 1, moved do screen:OnListenCommand(BACK[command], 0, pcon) end
         end
     end
     local cur = nav.CurrentControl
@@ -447,6 +480,8 @@ local function selectTarget(t, clicked)
     if not (nav and nav:IsValid()) then return false end
     local cur = nav.CurrentControl
     if cur and cur:IsValid() and sameObject(cur, t.control) then return true end
+    -- (a hover over a control the steps didn't reach before doesn't step again: each step plays the move sound)
+    if not clicked and t.unreached then return false end
     local steppable = navIndex(nav, t.control) ~= nil or cell(t.control) ~= nil
     local stepped, why, how = pcall(stepTo, t, nav, clicked)
     if stepped and why then
@@ -461,6 +496,7 @@ local function selectTarget(t, clicked)
         local missed = t.control:GetFName():ToString()
         if missed ~= lastMissed then log("mouse hover: %s not reached by the game's steps", missed) end
         lastMissed = missed
+        t.unreached = true
         return false
     end
     cur = nav.CurrentControl
