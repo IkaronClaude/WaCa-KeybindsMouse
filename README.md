@@ -11,7 +11,8 @@ the camera turns only while you hold a mouse button. This mod makes it play like
 - **Hover selects**: the button under the mouse is the selected one - the game's own selection, moved with its own
   steps, so the highlight, the sound and Enter all follow it.
 - **The map**: drag it with the mouse, zoom with the wheel; point at an icon to see what it is (Clan Outpost, Main
-  Quest, the prey or enemy kind ...: the names come from the map's own legend).
+  Quest, a clan's camp, the prey or enemy kind, Barter Cat ...: the names come from the map's own legend and texts).
+- **Scroll lists** (Bonds, inventory, quests ...): drag the scroll bar, or use the wheel over the list.
 - **Mouse look** in gameplay: the camera follows the mouse directly - no button to hold, no stick dead zone, curve or
   speed cap (`[Mouse] LookYaw` / `LookPitch`; the game's own invert settings apply).
 - **Left click** interacts (E still works) and **advances dialogue** - a click on an answer choice just picks it.
