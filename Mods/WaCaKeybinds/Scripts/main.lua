@@ -115,4 +115,8 @@ end)
 -- the mouse: the cursor in menus, clicks on the menus' buttons, mouse look and camera-relative movement ([Mouse])
 Menus.Init({ WaCa = WaCa, log = log, modDir = modDir })
 
+-- the controls menu: Enter / a click on the pause menu's CONTROLS page - the game's own unused "Control Configuration"
+-- popup as a key rebinding screen ([ControlsMenu])
+require("controls").Init({ WaCa = WaCa, log = log, modDir = modDir, Menus = Menus })
+
 WaCa.Ready()

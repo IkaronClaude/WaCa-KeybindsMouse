@@ -21,6 +21,11 @@ the camera turns only while you hold a mouse button. This mod makes it play like
 - The splash screen ("press any key") takes a click too.
 
 ## The keys
+- **Rebind keys in the game**: press Enter (or click) on the pause menu's **CONTROLS** page. It opens the game's own
+  "Control Configuration" screen, which ships with the game but is never shown. Pick a key with Up / Down or the mouse,
+  press Enter or click, then press the new key. Escape cancels and Delete gives the command back the game's key.
+  "Reset Default" does that for every command on the screen. The change applies at once and is saved to
+  `keybinds.ini`.
 - **Rebind any keyboard / mouse key** for every gameplay command (`[Actions]`, `[Axes]`) - a real rebinding of the
   game's own bindings, not keys layered on top. Every command and its default is listed in the file. Gamepad
   bindings are never touched.
@@ -30,9 +35,9 @@ the camera turns only while you hold a mouse button. This mod makes it play like
 - The menus' own keys and their key icons (`[UIKeys]`, `[UIIcons]`), and key aliases in menus (`[KeyAliases]`) and in
   conversations (`[DialogueKeyAliases]`).
 
-All of it in one file: `ue4ss\Mods\WaCaKeybinds\config\keybinds.ini`. Binding changes apply the next time the game
-rebuilds its bindings (switching between keyboard and gamepad, or loading an area); `[Mouse]` and the aliases at the
-next start.
+All of it in one file: `ue4ss\Mods\WaCaKeybinds\config\keybinds.ini`. A key set in the game's controls screen applies
+at once. A change made in the file applies the next time the game rebuilds its bindings (switching between keyboard and
+gamepad, or loading an area); `[Mouse]` and the aliases at the next start.
 
 ## Install
 Needs **UE4SS for Warrior Cats** ([Nexus](https://www.nexusmods.com/warriorcatsclansoftheforest/mods/2)) and
@@ -44,6 +49,8 @@ Coming from the all-in-one WaCa ModKit 0.7? Its `config\keybinds.ini` is this mo
 
 ## How it works
 - Rebinding: WaCa Core's native half rewrites the game's natively built default bindings before they're installed.
+  The controls screen writes the file and has WaCa Core swap that command's keys in the live bindings at once. While
+  the screen is open, the game gets no keys or clicks, so the pause menu under it stays as it was.
 - The cursor: decided whenever a screen comes or goes (WaCa Core's screen events, no polling) - a menu gets
   "game and UI" input with the cursor, gameplay the game's own input with the mouse captured for mouse look.
 - Clicks: every menu button has a collision button Slate hit-tests, but the game binds nothing to its click; a left

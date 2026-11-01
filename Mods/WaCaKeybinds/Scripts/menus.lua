@@ -13,6 +13,10 @@ local function menuShowing(leaving) return WaCa.MenuShowing(leaving) end
 
 local enabled = true
 local shown = nil
+-- a menu of this mod's own is on top (the controls menu, controls.lua): the mouse leaves the game's menus alone
+local heldBy = nil
+function Menus.Hold(fn) heldBy = fn end
+local function held() return heldBy ~= nil and heldBy() end
 -- Gameplay's mouse capture: PC-style mouse look, the mouse captured as soon as the game viewport has focus (EMouseCapture
 -- CapturePermanently = 1). Not the game's own mode: that is "capture while a button is held" - drag to look, which the
 -- operator called a regression (2026-10-25); and "capture on the first click" (2) left no mouse control at all.
@@ -1184,6 +1188,7 @@ function Menus.Init(c)
     -- hover: the control under the mouse becomes the selected one (native MouseMove, at most every 40 ms)
     WaCa.On("MouseMove", function()
         ExecuteInGameThread(function()
+            if held() then return end
             if drag then return dragMoved() end
             if sliderDrag then return sliderMoved() end
             local m = shown == true and mapUp()
@@ -1214,7 +1219,7 @@ function Menus.Init(c)
     end
     WaCa.On("MouseWheel", function(_, notches)
         local n = tonumber(notches) or 0
-        if n == 0 or shown ~= true then return end
+        if n == 0 or shown ~= true or held() then return end
         ExecuteInGameThread(function()
             if not mapUp() then
                 -- over a scroll list: a notch = a step of its selection (wheel up = up)
@@ -1236,7 +1241,7 @@ function Menus.Init(c)
         end)
     end)
     WaCa.On("KeyDown", function(_, key)
-        if key ~= "LeftMouseButton" then return end
+        if key ~= "LeftMouseButton" or held() then return end
         if splash then
             log("menus: click on the splash - pressing Enter")
             WaCa.Command("PressKey|Enter")
