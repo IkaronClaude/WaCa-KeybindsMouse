@@ -112,6 +112,31 @@ WaCa.On("ScreenShown", function()
     applyUIKeys()
 end)
 
+-- THE QUESTS KEY ON THE HUD (tickets.md 19a "hint that quests are on K", 2026-11-02): the game's HUD has its own
+-- quest button - a scroll icon with the key badge (WBP_GuiHudQuestControl, the HUD's mcGuiOpenQuest), the badge filled
+-- from the bindings - but keeps it hidden in an unused group (CanvasOld; its two siblings, an old map and inventory
+-- button, are hidden one by one and stay so). [Hints] QuestKey = 1 shows it in every HUD the game builds.
+local hints = ini and ini["Hints"] or {}
+if (hints.QuestKey or "1") ~= "0" then
+    local said = false
+    WaCa.On("ScreenShown", function(screen)
+        local ok, cls = pcall(function() return screen:GetClass():GetFName():ToString() end)
+        if not (ok and cls:find("^WBP_GuiHudGame")) then return end
+        local okShow, err = pcall(function()
+            local q = WaCa.Live(screen.mcGuiOpenQuest)
+            if not q then return end
+            local group = WaCa.Live(q:GetParent())
+            if group then group:SetVisibility(4) end            -- (SelfHitTestInvisible: seen, never in the way)
+            q:SetVisibility(4)
+            if not said then
+                said = true
+                log("the HUD's quest button shown (the quests key beside StarClan's) - [Hints] QuestKey")
+            end
+        end)
+        if not okShow then log("the HUD's quest button: %s", tostring(err)) end
+    end)
+end
+
 -- the mouse: the cursor in menus, clicks on the menus' buttons, mouse look and camera-relative movement ([Mouse])
 Menus.Init({ WaCa = WaCa, log = log, modDir = modDir })
 
