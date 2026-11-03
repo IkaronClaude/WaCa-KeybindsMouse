@@ -240,7 +240,7 @@ local function clashes(row, key)
     end
     for _, e in pairs(modKeys) do
         -- ("ClanLife" said as "Clan Life")
-        if e.key == key then out[#out + 1] = string.format("%s's key to %s", (e.mod:gsub("(%l)(%u)", "%1 %2")), e.label) end
+        if WaCa.KeyIs(key, e.key) then out[#out + 1] = string.format("%s's key to %s", (e.mod:gsub("(%l)(%u)", "%1 %2")), e.label) end
     end
     return out
 end
