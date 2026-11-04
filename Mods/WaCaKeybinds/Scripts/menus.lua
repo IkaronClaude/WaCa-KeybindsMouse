@@ -853,8 +853,30 @@ local function iconName(m, icon)
         local text = id and WaCa.GetText(id)
         if text and text ~= "" and text ~= id then return text end
     end
-    -- else the foreground image's own name, readable (T_UI_Icon_Map_Herb_D: Herb, MI_UI_IconDenVisit: Den Visit)
+    -- (the game's quest-hint pulse - a mod's marker in the world (WaCa Clan Life's duty points) draws one: its name is
+    -- that mod's mark at the same place, not the image's "Pulse1" - operator 2026-11-04)
     local front = texs[#texs]
+    if front and front:find("Pulse") then
+        local labels = WaCa.Latest("map.marks")
+        local l, t, r, b = WaCa.WidgetRect(icon)
+        local best, bd
+        pcall(function()
+            local c = m.CanvasGenericIcons
+            for i = 0, c:GetChildrenCount() - 1 do
+                local w = c:GetChildAt(i)
+                local id = w:GetFName():ToString():match("^WaCaMapMark_(.+)$")
+                if id and type(labels) == "table" and labels[id] and l then
+                    local ml, mt, mr, mb = WaCa.WidgetRect(w)
+                    if ml then
+                        local d = math.abs((ml + mr) / 2 - l) + math.abs((mt + mb) / 2 - t)
+                        if d <= 60 and (not bd or d < bd) then best, bd = labels[id], d end
+                    end
+                end
+            end
+        end)
+        if best then return best end
+    end
+    -- else the foreground image's own name, readable (T_UI_Icon_Map_Herb_D: Herb, MI_UI_IconDenVisit: Den Visit)
     if front then
         local readable = front:gsub("^MI_", ""):gsub("^M_", ""):gsub("^T_", ""):gsub("^UI_", ""):gsub("^Icon_?", "")
             :gsub("^Map_", ""):gsub("_[Dd]$", ""):gsub("_Normal$", ""):gsub("_", " "):gsub("(%l)(%u)", "%1 %2")
@@ -881,16 +903,29 @@ local function label(m)
     -- (the font of a legend entry's text: the legend's TITLE font has a heavy outline that drew as a dark copy off to
     -- the left of a small label - operator 2026-10-30, "drop shadow too far left")
     pcall(function() l:SetFont(m.mcGuiMapLegend.mcGuiLegendOutspot.mcGuiText.Font) end)
+    -- (and without its outline: that entry font's OutlineSize is 40 - the "drop shadow way too far left" the operator
+    -- saw again 2026-11-04 was that outline, a dark copy of the word drawn ~10 px to its left; VM: 0 = clean)
+    pcall(function() local f = l.Font; f.OutlineSettings.OutlineSize = 0; l:SetFont(f) end)
     pcall(function() l:SetShadowOffset({ X = 2, Y = 2 }) l:SetShadowColorAndOpacity({ R = 0, G = 0, B = 0, A = 0.9 }) end)
     mapLabel.label = (l:GetFullName():gsub("^%S+ ", ""))
     return l
+end
+
+-- WHERE THE MAP IS POINTED AT: the mouse - or, the mouse still for a while (the gamepad moving the map), the screen's
+-- middle, where the game's own gamepad cursor sits (operator 2026-11-04: the names showed for the mouse only)
+local lastMouse = -math.huge
+local function mapPointer(m)
+    if os.clock() - lastMouse <= 1.5 then return WaCaNative_CursorPos() end
+    local l, t, r, b = WaCa.WidgetRect(m.WidgetTree.RootWidget)
+    if l then return (l + r) / 2, (t + b) / 2 end
+    return WaCaNative_CursorPos()
 end
 
 local function mapHover(m)
     if not WaCaNative_CursorPos then return end
     -- (a map icon is placed by its middle: its widget's box starts where the icon's middle is drawn - VM 2026-10-28,
     -- the cursor on the player's icon was the box's top left corner. The hit area: a square around that point.)
-    local cx, cy = WaCaNative_CursorPos()
+    local cx, cy = mapPointer(m)
     local best, bestDist
     local function consider(w)
         if not (w and w:IsValid() and reallyShown(w)) then return end
@@ -917,7 +952,7 @@ local function mapHover(m)
             mapLabel.shown = nil
             return
         end
-        local x, y = WaCaNative_CursorPos()
+        local x, y = cx, cy
         local left, top = WaCa.WidgetRect(m.WidgetTree.RootWidget)
         local scale = StaticFindObject("/Script/UMG.Default__WidgetLayoutLibrary"):GetViewportScale(controller())
         l.Slot:SetPosition({ X = (x - (left or 0)) / scale + 40, Y = (y - (top or 0)) / scale + 10 })
@@ -1154,6 +1189,26 @@ function Menus.Init(c)
     -- right / left move the cat sideways relative to the camera (the game's own movement already is camera-relative;
     -- only its camera turn from right / left goes) - 0 = the game's tank-style turning
     WaCa.Command("CameraRelativeMove|" .. ((mouse.CameraRelativeMove or "1") == "0" and "0" or "1"))
+    -- THE GAME'S OWN MOUSE (its patch 1.1, 2026-11-02: mouse in menus, left click to choose / interact, its own mouse
+    -- look with sensitivity sliders): ours on top doubled every click - buttons needed a double click, the tab bar
+    -- marked two tabs, hover fought the game's (operator 2026-11-04). Read from the game itself: its default input
+    -- has the mouse-camera axes (Player_Mouse_Camera_Right / _Up) only once it handles the mouse. Then our menu mouse
+    -- and mouse look stay off ([Mouse] WhenTheGameHasMouse = Ours keeps them); the rebinding screen and the rest stay.
+    local function gameHasMouse()
+        local found = false
+        pcall(function()
+            StaticFindObject("/Script/Engine.Default__InputSettings").AxisMappings:ForEach(function(_, e)
+                local name = e:get().AxisName:ToString()
+                if name == "Player_Mouse_Camera_Right" or name == "Player_Mouse_Camera_Up" then found = true end
+            end)
+        end)
+        return found
+    end
+    if gameHasMouse() and (mouse.WhenTheGameHasMouse or "Game") ~= "Ours" then
+        log("mouse: the game handles the mouse itself (its input has Player_Mouse_Camera axes) - WaCa's menu mouse " ..
+            "and mouse look stay off ([Mouse] WhenTheGameHasMouse = Ours turns them on)")
+        return
+    end
     -- no menu cursor handling: nothing tells gameplay from menus, so mouse look is simply on
     if not enabled then Menus.MouseLook(true) return end
     -- Decided on the next tick, never inside the event: a screen is built inside the game's own input handling (the
@@ -1186,7 +1241,22 @@ function Menus.Init(c)
         targetsStale = true later(true)
     end)
     -- hover: the control under the mouse becomes the selected one (native MouseMove, at most every 40 ms)
+    -- (the map's names follow the map too, not only the mouse: panning it moved the icon away under a still mouse and
+    -- the name stayed - operator 2026-11-04; and the gamepad moves the map with no mouse move at all)
+    local mapLoop = false
+    WaCa.On("ScreenShown", function(screen)
+        if mapLoop or not screen:GetClass():GetFName():ToString():find("WorldMap") then return end
+        mapLoop = true
+        local function tick()
+            local m = mapUp()
+            if not m then mapLoop = false return end
+            if shown == true and not drag and not held() then pcall(mapHover, m) end
+            ExecuteInGameThreadWithDelay(150, tick)
+        end
+        ExecuteInGameThreadWithDelay(150, tick)
+    end)
     WaCa.On("MouseMove", function()
+        lastMouse = os.clock()
         ExecuteInGameThread(function()
             if held() then return end
             if drag then return dragMoved() end
