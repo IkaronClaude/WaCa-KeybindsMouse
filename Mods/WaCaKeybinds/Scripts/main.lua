@@ -3,15 +3,16 @@
 -- buttons, mouse look in gameplay), key aliases, Space / click to advance dialogue, and the menus' own keys + icons.
 -- Needs WaCa Core.
 local VERSION = "1.0.0"
-local WaCa = require("WaCa")
+local hasCore, WaCa = pcall(require, "WaCa")    -- (no WaCa Core: its library is missing too)
 
 local modDir = debug.getinfo(1, "S").source:match("^@(.+)[/\\]Scripts[/\\]main%.lua$") or "."
 local function log(fmt, ...) print(string.format("[WaCaKeybinds] " .. fmt .. "\n", ...)) end
 log("%s loaded", VERSION)
-if not WaCaNative_Command then
+if not (hasCore and WaCaNative_Command) then
     log("WaCa Core is not installed (or off) - this mod needs it: nothing applied")
     return
 end
+if not WaCa.Needs("1.0.0", "WaCaKeybinds") then return end
 
 local Menus = require("menus")
 
