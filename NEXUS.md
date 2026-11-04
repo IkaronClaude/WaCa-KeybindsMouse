@@ -65,7 +65,7 @@ Vortex: untested - install manually.
   loading an area); `[Mouse]` settings at the next start.
 
 ## Source code & contributing
-Open source (Apache 2.0): TODO: https://github.com/IkaronClaude/WaCa-KeybindsMouse
+Open source (Apache 2.0): https://github.com/IkaronClaude/WaCa-KeybindsMouse
 
 **Contributions are very welcome!** Found a menu where the mouse doesn't work, or a key the game still hard-codes?
 Open an issue or a pull request on GitHub (or post in the comments) with the menu's name and your
