@@ -285,7 +285,7 @@ local function bindDirection(row, key)
     table.insert(parts, 1, string.format("%s:%g", key, d.scale))
     local also = clashes(row, key)
     setIniKey("Axes", d.axis, table.concat(parts, ", "))
-    log("controls menu: %s - %s = %s (keybinds.ini [Axes])%s", row.label, d.axis, table.concat(parts, ", "),
+    log("controls menu: %s - %s = %s (keybinds.user.ini [Axes])%s", row.label, d.axis, table.concat(parts, ", "),
         #also > 0 and (" - also " .. table.concat(also, ", ")) or "")
     apply()
     setStatus(#also > 0 and string.format("%s is %s now - it is also %s", key, row.label, table.concat(also, ", "))
@@ -303,7 +303,7 @@ local function bind(row, key)
     -- commands that never meet: Drop / Friend_Talk = C)
     local also = clashes(row, key)
     setIniKey("Actions", row.command, table.concat(keys, ", "))
-    log("controls menu: %s = %s (keybinds.ini [Actions])%s", row.command, table.concat(keys, ", "),
+    log("controls menu: %s = %s (keybinds.user.ini [Actions])%s", row.command, table.concat(keys, ", "),
         #also > 0 and (" - also " .. table.concat(also, ", ")) or "")
     apply()
     if #also > 0 then
