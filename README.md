@@ -31,7 +31,8 @@ the camera turns only while you hold a mouse button. This mod makes it play like
   bindings are never touched.
 - **Escape** pauses (instead of P) and goes back / closes in every menu, the character creator included (BackSpace
   still works); the menus show the Esc icon.
-- **Space** advances dialogue like Enter.
+- **Space** advances dialogue and confirms in menus, like Enter (the menus' own Y button moves from Space to F -
+  `config/keybinds.ini` [UIKeys] / [KeyAliases]).
 - The menus' own keys and their key icons (`[UIKeys]`, `[UIIcons]`), and key aliases in menus (`[KeyAliases]`) and in
   conversations (`[DialogueKeyAliases]`).
 
