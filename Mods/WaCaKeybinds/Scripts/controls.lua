@@ -87,8 +87,21 @@ end
 -- keybinds.ini: one key of one section rewritten in place - the comments, the order and every other line stay
 
 local function setIniKey(section, key, value)
-    local f = io.open(iniPath, "r")
-    if not f then return false end
+    -- (THE PLAYER'S KEYS GO TO keybinds.user.ini - no release ships it, so an update never wipes a rebind; WaCa Core's
+    -- ReadIni and its native reader lay it over keybinds.ini. A key back to the game's own = "-", which removes the
+    -- shipped line's keys too. tickets.md P2 "updates overwrite players' settings")
+    local userPath = iniPath:gsub("%.ini$", ".user.ini")
+    if value == nil then value = "-" end
+    local f = io.open(userPath, "r")
+    if not f then
+        f = io.open(userPath, "w")
+        if not f then return false end
+        f:write("; WaCa Keybinds & Mouse - YOUR keys (the controls screen writes here). Laid over keybinds.ini; an update\r\n",
+                "; never replaces this file. Command = Key[, Key ...]; Command = - : the game's own keys.\r\n")
+        f:close()
+        f = io.open(userPath, "r")
+        if not f then return false end
+    end
     local text = f:read("*a")
     f:close()
     local nl = text:find("\r\n", 1, true) and "\r\n" or "\n"
@@ -129,7 +142,7 @@ local function setIniKey(section, key, value)
         out[#out + 1] = "[" .. section .. "]"
         out[#out + 1] = key .. " = " .. value
     end
-    f = io.open(iniPath, "w")
+    f = io.open(userPath, "w")
     if not f then return false end
     f:write(table.concat(out, nl), nl)
     f:close()
