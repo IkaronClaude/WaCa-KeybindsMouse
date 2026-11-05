@@ -925,7 +925,9 @@ local function mapHover(m)
     if not WaCaNative_CursorPos then return end
     -- (a map icon is placed by its middle: its widget's box starts where the icon's middle is drawn - VM 2026-10-28,
     -- the cursor on the player's icon was the box's top left corner. The hit area: a square around that point.)
-    local cx, cy = mapPointer(m)
+    -- (the MOUSE first, the screen's middle only when the mouse is still AND on no mark: a mouse resting on a mark
+    -- flipped its name to 'Player' every 1.5 s - the middle's - QA run on the VM 2026-11-05)
+    local cx, cy = WaCaNative_CursorPos()
     local best, bestDist
     local function consider(w)
         if not (w and w:IsValid() and reallyShown(w)) then return end
@@ -938,12 +940,22 @@ local function mapHover(m)
         local dx, dy = math.abs(cx - px), math.abs(cy - py)
         if dx <= half and dy <= half and (not bestDist or dx + dy < bestDist) then best, bestDist = w, dx + dy end
     end
-    local okc, errc = pcall(function()
-        local c = m.CanvasGenericIcons
-        for i = 0, c:GetChildrenCount() - 1 do consider(c:GetChildAt(i)) end
-        consider(m.mcGuiPlayerIcon)
-    end)
-    if not okc then log("map: %s", tostring(errc)) end
+    local function search()
+        local okc, errc = pcall(function()
+            local c = m.CanvasGenericIcons
+            for i = 0, c:GetChildrenCount() - 1 do consider(c:GetChildAt(i)) end
+            consider(m.mcGuiPlayerIcon)
+        end)
+        if not okc then log("map: %s", tostring(errc)) end
+    end
+    search()
+    if not best then
+        local px, py = mapPointer(m)
+        if px ~= cx or py ~= cy then
+            cx, cy = px, py
+            search()
+        end
+    end
     local text = best and iconName(m, best) or nil
     local ok, err = pcall(function()
         local l = label(m)
