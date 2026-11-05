@@ -2,7 +2,7 @@
 -- WaCa Core's native half when the game builds its bindings), a real MOUSE (the cursor in menus, clicking the menus'
 -- buttons, mouse look in gameplay), key aliases, Space / click to advance dialogue, and the menus' own keys + icons.
 -- Needs WaCa Core.
-local VERSION = "1.0.0"
+local VERSION = "1.1.0"
 local hasCore, WaCa = pcall(require, "WaCa")    -- (no WaCa Core: its library is missing too)
 
 local modDir = debug.getinfo(1, "S").source:match("^@(.+)[/\\]Scripts[/\\]main%.lua$") or "."

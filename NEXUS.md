@@ -3,7 +3,7 @@
 <!-- Paste-ready text for the Nexus Mods upload form. Replace the TODO links once the pages exist. -->
 
 **Name:** WaCa Keybinds & Mouse
-**Version:** 1.0.0
+**Version:** 1.1.0
 **Category:** Controls / User Interface
 **Summary (short description, max 350 characters):**
 Play with a real mouse and keyboard: a cursor in every menu, click the menus' buttons, mouse look without holding a
@@ -83,4 +83,6 @@ the licence and credit, and say what you changed.
 - UE4SS (RE-UE4SS team), MinHook (Tsuda Kageyu), CaptainJackalope (UE4SS for Warrior Cats on Nexus).
 
 ## Changelog
+- 1.1.0 - Space confirms in menus; with the game's own mouse controls (its patch 1.1) WaCa's mouse look stays out of
+  the way; the map's hover names are readable and follow the gamepad pointer too.
 - 1.0.0 - first release as its own mod (from the all-in-one WaCa ModKit 0.7).
